@@ -1,52 +1,54 @@
-# import speech_recognition as sr
-#
-# r = sr.Recognizer()
-# m = sr.Microphone()
-# TIMEOUT = 0.5
-#
-# try:
-#     print("A moment of silence, please...")
-#     with m as source:
-#         r.adjust_for_ambient_noise(source)
-#     print("Set minimum energy threshold to {}".format(r.energy_threshold))
-#     while True:
-#         try:
-#             with m as source:
-#                 audio = r.listen(source, timeout=TIMEOUT)
-#         try:
-#
-#             # recognize speech using Google Speech Recognition
-#             value = r.recognize_google(audio)
-#
-#             # we need some special handling here to correctly print unicode characters to standard output
-#             if str is bytes:  # this version of Python uses bytes for strings (Python 2)
-#                 print(u"You said {}".format(value).encode("utf-8"))
-#             else:  # this version of Python uses unicode for strings (Python 3+)
-#                 print("You said {}".format(value))
-#         except sr.UnknownValueError:
-#             print("Oops! Didn't catch that")
-#         except sr.RequestError as e:
-#             print("Uh oh! Couldn't request results from Google Speech Recognition service; {0}".format(e))
-#         except sr.WaitTimeoutError:
-#             # print('DEBUG: speechrecognition.WaitTimeoutError')
-#             pass
-# except KeyboardInterrupt:
-#     pass
-
-
 # !/usr/bin/env python3
-
-# NOTE: this example requires PyAudio because it uses the Microphone class
-
 from queue import Queue  # Python 3 import
 from threading import Thread
 
 import speech_recognition as sr
 
-from text_to_speech import say
+from code_controller import code_ctrlr
+from helper import paste, shift
 
 r = sr.Recognizer()
 audio_queue = Queue()
+
+STOP_LISTENING_HOTWORDS = {'stop listening', 'bye'}
+
+
+def rerun(py_charm=True):  # TODO: increase support + ability to bring correct window to focus
+    if py_charm:
+        shift("f10")
+        return True
+    return False
+
+
+def other_cmds_ctrlr(_first_word, words, sentence):
+    if _first_word == "paste":
+        paste()
+        return True
+    if _first_word in ["run", "rerun"]:
+        rerun()
+        return True
+    return False
+
+
+def features_controller(sentence, words):
+    # search_ctrlr(words[0])
+    # type_ctrlr(words[0], sentence)
+    # keyboard_cmd_ctrlr(words[0], words, sentence)
+    if code_ctrlr(words[0], words, sentence):
+        return True
+    if other_cmds_ctrlr(words[0], words, sentence):
+        return True
+
+
+def cmd_dispatcher(sentence):
+    if sentence in STOP_LISTENING_HOTWORDS:
+        return True
+
+    # setup
+    sentence = str.lower(sentence)
+    words = sentence.split(' ')
+
+    features_controller(sentence, words)
 
 
 def recognize_worker(use_google=True):
@@ -63,8 +65,9 @@ def recognize_worker(use_google=True):
                 # for testing purposes, we're just using the default API key
                 # to use another API key, use `r.recognize_google(audio, key="GOOGLE_SPEECH_RECOGNITION_API_KEY")`
                 # instead of `r.recognize_google(audio)`
-                print("Avi: " + r.recognize_google(audio))
-                say("I don't shit a fuck!")
+                sentence = r.recognize_google(audio)
+                print("Avi: " + sentence)
+                cmd_dispatcher(sentence)
             except sr.UnknownValueError:
                 print("Google Speech Recognition could not understand audio")
             except sr.RequestError as e:
@@ -93,9 +96,10 @@ with sr.Microphone() as source:
 
         while True:  # repeatedly listen for phrases and put the resulting audio on the audio processing job queue
             try:
-                audio_queue.put(r.listen(source, timeout=0.5))
+                audio_queue.put(r.listen(source, timeout=1))
             except sr.WaitTimeoutError:
                 # print('DEBUG: speechrecognition.WaitTimeoutError')
+                print(".")
                 pass
     except KeyboardInterrupt:  # allow Ctrl + C to shut down the program
         pass
